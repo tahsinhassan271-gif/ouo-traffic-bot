@@ -22,10 +22,14 @@ human through rotating free proxies — generating views on paid shorteners.
    - `CRON_SECRET` = protects `/api/cron` (Vercel Cron sends it automatically as a Bearer token)
 7. Deploy.
 
-`vercel.json` asks for `memory: 3008` and `maxDuration: 300` because a cold
-Chromium start plus a real visit does not fit in the old 60s / 1GB budget (a
-smaller instance gets the browser OOM-killed). If you lower `maxDuration`, lower
-`VISIT_DEADLINE_MS` too. `includeFiles` must stay a single glob string - Vercel
+`vercel.json` sets `maxDuration: 300` because a cold Chromium start plus a real
+visit does not fit in the old 60s budget. If you lower it, lower
+`VISIT_DEADLINE_MS` too.
+
+Do **not** add `memory` to `vercel.json`: with Fluid compute enabled (Vercel's
+default for new projects) memory cannot be configured there, and setting it fails
+or is ignored. Hobby functions already get 2 GB / 1 vCPU, which is enough for
+Chromium. `includeFiles` must stay a single glob string - Vercel
 rejects an array with "includeFiles should be string" and the whole deployment
 fails before building.
 
