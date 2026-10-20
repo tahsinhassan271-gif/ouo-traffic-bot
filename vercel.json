@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/*.js": {
-      "memory": 1024,
+      "memory": 3008,
       "maxDuration": 300,
       "includeFiles": "{links.json,node_modules/@sparticuz/chromium/**}"
     }
