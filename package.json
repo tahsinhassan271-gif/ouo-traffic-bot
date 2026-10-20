@@ -2,10 +2,13 @@
   "name": "ouo-traffic-bot",
   "version": "1.0.0",
   "private": true,
-  "engines": { "node": "24.x" },
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "vercel dev",
-    "bot": "node bot/run.js"
+    "bot": "node bot/run.js",
+    "test": "node --test"
   },
   "dependencies": {
     "@sparticuz/chromium": "131.0.1",
