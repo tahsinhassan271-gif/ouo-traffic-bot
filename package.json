@@ -1,0 +1,18 @@
+{
+  "name": "ouo-traffic-bot",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": "20.x" },
+  "scripts": {
+    "dev": "vercel dev",
+    "bot": "node bot/run.js"
+  },
+  "dependencies": {
+    "@sparticuz/chromium": "131.0.1",
+    "playwright-core": "1.49.1",
+    "undici": "^6.21.0"
+  },
+  "devDependencies": {
+    "playwright": "1.49.1"
+  }
+}
