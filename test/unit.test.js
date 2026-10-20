@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const { analyze, registrableDomain } = require('../lib/phish');
 const { parseProxy } = require('../lib/proxies');
 const { assertPublicHttpUrl, isPublicIp } = require('../lib/urlsafe');
-const { sanitizeArgs } = require('../lib/browser');
+const { sanitizeArgs, summarizeError } = require('../lib/browser');
 const { isShortenerHost } = require('../lib/visitor');
 
 test('registrableDomain handles multi-part public suffixes', () => {
@@ -92,4 +92,28 @@ test('shortener hosts are recognised, destinations are not', () => {
   assert.equal(isShortenerHost('example.com'), false);
   assert.equal(isShortenerHost('notouo.io'), false);
   assert.equal(isShortenerHost(''), false);
+});
+
+test('launch errors surface the cause, not the argv dump', () => {
+  const pwError = new Error([
+    'browserType.launch: Target page, context or browser has been closed',
+    'Browser logs:',
+    '',
+    '<launching> /tmp/chromium --disable-field-trial-config --disable-background-networking --very-long-argv-dump',
+    '<launched> pid=2742',
+    '[pid=2742][err] /tmp/chromium: error while loading shared libraries: libnss3.so: cannot open shared object file',
+    '[pid=2742] <process did exit: exitCode=127, signal=null>',
+    'Call log:',
+    '  - <launching> /tmp/chromium --more-argv',
+  ].join('\n'));
+
+  const s = summarizeError(pwError);
+  assert.match(s, /libnss3\.so/);
+  assert.match(s, /exitCode=127/);
+  assert.ok(s.length <= 300);
+  assert.ok(!s.includes('--disable-field-trial-config'));
+});
+
+test('short plain errors are passed through', () => {
+  assert.equal(summarizeError(new Error('timeout of 30000ms exceeded')), 'timeout of 30000ms exceeded');
 });

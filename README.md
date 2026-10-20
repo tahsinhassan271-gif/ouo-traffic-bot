@@ -22,11 +22,34 @@ human through rotating free proxies — generating views on paid shorteners.
    - `CRON_SECRET` = protects `/api/cron` (Vercel Cron sends it automatically as a Bearer token)
 7. Deploy.
 
-`vercel.json` asks for `maxDuration: 300` (the project default) because a cold
-Chromium start plus a real visit does not fit in the old 60s budget. If you lower
-it, lower `VISIT_DEADLINE_MS` too. `includeFiles` must stay a single glob string -
-Vercel rejects an array with "includeFiles should be string" and the whole
-deployment fails before building.
+`vercel.json` sets `maxDuration: 300` because a cold Chromium start plus a real
+visit does not fit in the old 60s budget. If you lower it, lower
+`VISIT_DEADLINE_MS` too.
+
+Do **not** add `memory` to `vercel.json`: with Fluid compute enabled (Vercel's
+default for new projects) memory cannot be configured there, and setting it fails
+or is ignored. Hobby functions already get 2 GB / 1 vCPU, which is enough for
+Chromium. `includeFiles` must stay a single glob string - Vercel
+rejects an array with "includeFiles should be string" and the whole deployment
+fails before building.
+
+### Chromium on Vercel
+
+`@sparticuz/chromium` only unpacks its Amazon Linux shared libraries when
+`AWS_EXECUTION_ENV` / `AWS_LAMBDA_JS_RUNTIME` look like a Lambda runtime. Vercel
+does not expose those, so by default the browser dies with exit code 127
+(`libnss3.so: cannot open shared object file`) and Playwright reports the useless
+"Target page, context or browser has been closed". `lib/browser.js` now unpacks
+`bin/al2023.tar.br` itself and prepends `/tmp/al2023/lib` to `LD_LIBRARY_PATH`
+before launching.
+
+`/api/warm` reports the outcome plus the resolved paths, so it is the fastest way
+to check a deployment:
+
+```json
+{"ok": true, "ms": 812, "runtime": {"mode": "serverless", "executablePath": "/tmp/chromium",
+ "libsPath": "/tmp/al2023/lib", "libsPresent": true, "ldLibraryPath": "/tmp/al2023/lib"}}
+```
 
 ## Turn on automation
 
