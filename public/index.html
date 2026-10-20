@@ -55,7 +55,8 @@
       <div class="stat"><b id="sUsd">$0.0000</b><span>est. earnings</span></div>
       <div class="stat"><b id="sPool">-</b><span>proxies loaded</span></div>
     </div>
-    <div class="muted" id="warm" style="margin-top:10px">warming chromium...</div>
+    <div class="muted" id="sSplit" style="margin-top:10px">&nbsp;</div>
+    <div class="muted" id="warm">warming chromium...</div>
   </div>
 
   <div class="panel">
@@ -75,7 +76,9 @@
   </div>
 
   <div class="panel">
-    <div class="muted" style="margin-bottom:8px">Saved links (click to load)</div>
+    <div class="muted" style="margin-bottom:8px">
+      Saved links - stored in this browser only. The automation reads <code>links.json</code> from the repo.
+    </div>
     <div id="linkList"><div class="muted">none yet</div></div>
   </div>
 
@@ -99,6 +102,41 @@ async function readJson(r) {
   catch { return { j: null, raw: text, ok: false }; }
 }
 
+const TOKEN_KEY = 'ouo_access_token';
+const getToken = () => localStorage.getItem(TOKEN_KEY) || '';
+let tokenAsked = false;
+
+function withToken(u) {
+  const t = getToken();
+  if (!t) return u;
+  return u + (u.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(t);
+}
+
+// Every call gets a timeout: a Vercel 504 or a hung proxy should not leave the
+// UI spinning forever.
+async function apiFetch(path, ms = 120000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const t = getToken();
+    const r = await fetch(withToken(path), {
+      signal: ctrl.signal,
+      headers: t ? { 'x-access-token': t } : {},
+    });
+    if (r.status === 401 && !tokenAsked) {
+      tokenAsked = true;
+      const entered = prompt('This deployment is protected. Enter ACCESS_TOKEN:');
+      if (entered && entered.trim()) {
+        localStorage.setItem(TOKEN_KEY, entered.trim());
+        return apiFetch(path, ms);
+      }
+    }
+    return r;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function links() { try { return JSON.parse(localStorage.getItem(LS)) || []; } catch { return []; } }
 function saveLinks(l) { localStorage.setItem(LS, JSON.stringify(l)); render(); }
 
@@ -110,7 +148,12 @@ function render() {
   l.forEach((u, i) => {
     const d = document.createElement('div');
     d.className = 'link';
-    d.innerHTML = `<span class="u">${u}</span>`;
+    // textContent, not innerHTML: the URL is user supplied and used to be
+    // injected as markup.
+    const span = document.createElement('span');
+    span.className = 'u';
+    span.textContent = u;
+    d.appendChild(span);
     const mk = (t, fn) => { const b = document.createElement('button'); b.textContent = t; b.onclick = fn; return b; };
     d.appendChild(mk('load', () => { $('urlIn').value = u; }));
     d.appendChild(mk('scan', () => doScan(u)));
@@ -124,7 +167,7 @@ async function warmUp() {
   const el = $('warm');
   el.textContent = 'warming chromium...';
   try {
-    const r = await fetch('/api/warm');
+    const r = await apiFetch('/api/warm', 90000);
     const { j, raw, ok } = await readJson(r);
     if (!ok) { el.textContent = 'warm: HTTP ' + r.status + ' ' + raw.slice(0, 120); return; }
     el.textContent = j.ok ? 'chromium ready (' + j.ms + 'ms)' : 'chromium FAILED: ' + j.error;
@@ -135,18 +178,27 @@ async function warmUp() {
 
 async function refreshStats() {
   try {
-    const r = await fetch('/api/stats');
+    const r = await apiFetch('/api/stats', 20000);
     const { j, ok } = await readJson(r);
     if (!ok) return;
     $('sViews').textContent = j.views ?? 0;
     $('sAttempts').textContent = j.attempts ?? 0;
     $('sUsd').textContent = '$' + (j.estimatedUsd ?? 0).toFixed(4);
+
+    const b = j.bot || {};
+    const web = j.web || {};
+    $('sSplit').textContent = b.available
+      ? 'dashboard ' + (web.views ?? 0) + ' · bot ' + (b.views ?? 0) +
+        ' (' + (b.runs ?? 0) + ' runs, last ' + (b.lastRun && b.lastRun.finished
+          ? new Date(b.lastRun.finished).toLocaleString() : 'never') + ')'
+      : 'bot totals unavailable here (data/stats.json not bundled)';
+
   } catch {}
 }
 
 async function refreshPool() {
   try {
-    const r = await fetch('/api/proxies');
+    const r = await apiFetch('/api/proxies', 60000);
     const { j, ok } = await readJson(r);
     $('sPool').textContent = ok ? (j.count ?? 0) : 'err';
   } catch { $('sPool').textContent = 'err'; }
@@ -156,10 +208,11 @@ async function doScan(url) {
   if (!url) return;
   reset('scanning ' + url + ' ...');
   try {
-    const r = await fetch('/api/resolve?url=' + encodeURIComponent(url));
+    const r = await apiFetch('/api/resolve?url=' + encodeURIComponent(url), 60000);
     const { j, raw, ok } = await readJson(r);
     if (!ok) { reset('HTTP ' + r.status + ' non-JSON:\n' + raw.slice(0, 400)); return; }
     const p = j.phishing;
+    if (!p) { reset('scan failed: ' + (j.error || ('HTTP ' + r.status))); return; }
     reset('');
     log('INPUT   ' + j.input);
     log('HOPS    ' + j.hops);
@@ -180,7 +233,7 @@ async function doVisit(url) {
   if (!url) return;
   reset('visiting ' + url + ' (20-50s) ...');
   try {
-    const r = await fetch('/api/visit?url=' + encodeURIComponent(url));
+    const r = await apiFetch('/api/visit?url=' + encodeURIComponent(url), 150000);
     const { j, raw, ok } = await readJson(r);
     if (!ok) {
       log('');
@@ -189,13 +242,12 @@ async function doVisit(url) {
       return;
     }
     log('');
-    log(j.success ? 'SUCCESS - view generated' : 'FAILED - ' + (j.error || 'no proxy got through'));
+    log(j.success ? 'SUCCESS - view generated' : 'FAILED - ' + (j.error || 'could not get past the shortener'));
     if (j.elapsedMs >= 0) log('elapsed: ' + j.elapsedMs + 'ms  pool: ' + j.poolSize);
-    if (j.where) log('where: ' + j.where);
     if (j.proxyUsed) log('proxy: ' + j.proxyUsed);
     if (j.final) log('final: ' + j.final);
     (j.attempts || []).forEach((a, i) =>
-      log(`  try${i + 1} ${a.proxy} ok=${a.ok} clicked=${a.clicked} ${a.note || ''}`));
+      log(`  try${i + 1} ${a.proxy} ok=${a.ok} clicked=${a.clicked} blocked=${a.blocked} ${a.note || ''}`));
   } catch (e) { log('network error: ' + e.message); }
   refreshStats();
 }
@@ -211,15 +263,22 @@ async function runBurst() {
   reset('burst started: ' + jobs.length + ' visits');
   let done = 0;
 
-  for (const u of jobs) {
-    await doVisit(u);
-    done++;
-    $('prog').style.width = Math.round((done / jobs.length) * 100) + '%';
+  try {
+    for (const u of jobs) {
+      await doVisit(u);
+      done++;
+      $('prog').style.width = Math.round((done / jobs.length) * 100) + '%';
+    }
+    log('');
+    log('BURST COMPLETE - ' + done + ' attempted');
+  } catch (e) {
+    log('');
+    log('BURST ABORTED after ' + done + ' of ' + jobs.length + ': ' + e.message);
+  } finally {
+    // Without this, one thrown visit left the button disabled until reload.
+    $('burstBtn').disabled = false;
+    refreshStats();
   }
-  $('burstBtn').disabled = false;
-  log('');
-  log('BURST COMPLETE - ' + done + ' attempted');
-  refreshStats();
 }
 
 $('saveBtn').onclick = () => {
