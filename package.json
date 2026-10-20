@@ -2,7 +2,7 @@
   "name": "ouo-traffic-bot",
   "version": "1.0.0",
   "private": true,
-  "engines": { "node": "20.x" },
+  "engines": { "node": "24.x" },
   "scripts": {
     "dev": "vercel dev",
     "bot": "node bot/run.js"
