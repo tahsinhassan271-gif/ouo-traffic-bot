@@ -55,6 +55,7 @@
       <div class="stat"><b id="sUsd">$0.0000</b><span>est. earnings</span></div>
       <div class="stat"><b id="sPool">-</b><span>proxies loaded</span></div>
     </div>
+    <div class="muted" id="warm" style="margin-top:10px">warming chromium...</div>
   </div>
 
   <div class="panel">
@@ -92,6 +93,12 @@ const out = $('out');
 const log = (m) => { out.textContent += '\n' + m; out.scrollTop = out.scrollHeight; };
 const reset = (m) => { out.textContent = m; };
 
+async function readJson(r) {
+  const text = await r.text();
+  try { return { j: JSON.parse(text), raw: text, ok: true }; }
+  catch { return { j: null, raw: text, ok: false }; }
+}
+
 function links() { try { return JSON.parse(localStorage.getItem(LS)) || []; } catch { return []; } }
 function saveLinks(l) { localStorage.setItem(LS, JSON.stringify(l)); render(); }
 
@@ -113,9 +120,24 @@ function render() {
   });
 }
 
+async function warmUp() {
+  const el = $('warm');
+  el.textContent = 'warming chromium...';
+  try {
+    const r = await fetch('/api/warm');
+    const { j, raw, ok } = await readJson(r);
+    if (!ok) { el.textContent = 'warm: HTTP ' + r.status + ' ' + raw.slice(0, 120); return; }
+    el.textContent = j.ok ? 'chromium ready (' + j.ms + 'ms)' : 'chromium FAILED: ' + j.error;
+  } catch (e) {
+    el.textContent = 'warm failed: ' + e.message;
+  }
+}
+
 async function refreshStats() {
   try {
-    const j = await (await fetch('/api/stats')).json();
+    const r = await fetch('/api/stats');
+    const { j, ok } = await readJson(r);
+    if (!ok) return;
     $('sViews').textContent = j.views ?? 0;
     $('sAttempts').textContent = j.attempts ?? 0;
     $('sUsd').textContent = '$' + (j.estimatedUsd ?? 0).toFixed(4);
@@ -124,8 +146,9 @@ async function refreshStats() {
 
 async function refreshPool() {
   try {
-    const j = await (await fetch('/api/proxies')).json();
-    $('sPool').textContent = j.count ?? 0;
+    const r = await fetch('/api/proxies');
+    const { j, ok } = await readJson(r);
+    $('sPool').textContent = ok ? (j.count ?? 0) : 'err';
   } catch { $('sPool').textContent = 'err'; }
 }
 
@@ -133,7 +156,9 @@ async function doScan(url) {
   if (!url) return;
   reset('scanning ' + url + ' ...');
   try {
-    const j = await (await fetch('/api/resolve?url=' + encodeURIComponent(url))).json();
+    const r = await fetch('/api/resolve?url=' + encodeURIComponent(url));
+    const { j, raw, ok } = await readJson(r);
+    if (!ok) { reset('HTTP ' + r.status + ' non-JSON:\n' + raw.slice(0, 400)); return; }
     const p = j.phishing;
     reset('');
     log('INPUT   ' + j.input);
@@ -155,15 +180,23 @@ async function doVisit(url) {
   if (!url) return;
   reset('visiting ' + url + ' (20-50s) ...');
   try {
-    const j = await (await fetch('/api/visit?url=' + encodeURIComponent(url))).json();
+    const r = await fetch('/api/visit?url=' + encodeURIComponent(url));
+    const { j, raw, ok } = await readJson(r);
+    if (!ok) {
+      log('');
+      log('HTTP ' + r.status + ' - non-JSON response:');
+      log(raw.slice(0, 400));
+      return;
+    }
     log('');
-    log(j.success ? 'SUCCESS - view generated' : 'FAILED - no proxy got through');
-    log('elapsed: ' + j.elapsedMs + 'ms  pool: ' + j.poolSize);
+    log(j.success ? 'SUCCESS - view generated' : 'FAILED - ' + (j.error || 'no proxy got through'));
+    if (j.elapsedMs >= 0) log('elapsed: ' + j.elapsedMs + 'ms  pool: ' + j.poolSize);
+    if (j.where) log('where: ' + j.where);
     if (j.proxyUsed) log('proxy: ' + j.proxyUsed);
     if (j.final) log('final: ' + j.final);
     (j.attempts || []).forEach((a, i) =>
       log(`  try${i + 1} ${a.proxy} ok=${a.ok} clicked=${a.clicked} ${a.note || ''}`));
-  } catch (e) { log('visit failed: ' + e.message); }
+  } catch (e) { log('network error: ' + e.message); }
   refreshStats();
 }
 
@@ -205,6 +238,7 @@ $('clearBtn').onclick = () => { if (confirm('clear saved links?')) saveLinks([])
 render();
 refreshStats();
 refreshPool();
+warmUp();
 setInterval(refreshStats, 15000);
 </script>
 </body>
