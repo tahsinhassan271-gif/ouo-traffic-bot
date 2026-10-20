@@ -1,0 +1,58 @@
+name: traffic-bot
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: 'Run duration (minutes)'
+        default: '180'
+      target_views:
+        description: 'Stop after N views (0 = duration only)'
+        default: '0'
+
+concurrency:
+  group: traffic-bot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run traffic bot
+        env:
+          USE_LOCAL_CHROMIUM: '1'
+          DURATION_MINUTES: ${{ github.event.inputs.minutes || '180' }}
+          TARGET_VIEWS: ${{ github.event.inputs.target_views || '0' }}
+          MIN_GAP_SECONDS: '20'
+          MAX_GAP_SECONDS: '70'
+          BREAK_EVERY: '25'
+          BREAK_SECONDS: '180'
+        run: node bot/run.js
+
+      - name: Commit results
+        run: |
+          git config user.name "traffic-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "traffic run $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push
