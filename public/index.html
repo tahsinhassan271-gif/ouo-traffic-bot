@@ -189,9 +189,9 @@ async function refreshStats() {
     const web = j.web || {};
     $('sSplit').textContent = b.available
       ? 'dashboard ' + (web.views ?? 0) + ' · bot ' + (b.views ?? 0) +
-        ' (' + (b.runs ?? 0) + ' runs, last ' + (b.lastRun && b.lastRun.finished
-          ? new Date(b.lastRun.finished).toLocaleString() : 'never') + ')'
-      : 'bot totals unavailable here (data/stats.json not bundled)';
+        ' (' + (b.runs ?? 0) + ' runs via ' + (b.source || '?') + ', last ' +
+        (b.lastRun && b.lastRun.finished ? new Date(b.lastRun.finished).toLocaleString() : 'never') + ')'
+      : 'no bot stats found yet (data/stats.json is committed after each Actions run)';
 
   } catch {}
 }
@@ -246,8 +246,11 @@ async function doVisit(url) {
     if (j.elapsedMs >= 0) log('elapsed: ' + j.elapsedMs + 'ms  pool: ' + j.poolSize);
     if (j.proxyUsed) log('proxy: ' + j.proxyUsed);
     if (j.final) log('final: ' + j.final);
-    (j.attempts || []).forEach((a, i) =>
-      log(`  try${i + 1} ${a.proxy} ok=${a.ok} clicked=${a.clicked} blocked=${a.blocked} ${a.note || ''}`));
+    (j.attempts || []).forEach((a, i) => {
+      log(`  try${i + 1} ${a.proxy} ok=${a.ok} clicks=${a.clicks} blocked=${a.blocked} completed=${a.completed}`);
+      log(`         ${a.startHost || '?'} -> ${a.finalHost || '?'}${a.note ? '  (' + a.note + ')' : ''}`);
+      (a.steps || []).forEach((st) => log(`         step${st.round} ${st.selector} -> ${st.to}`));
+    });
   } catch (e) { log('network error: ' + e.message); }
   refreshStats();
 }

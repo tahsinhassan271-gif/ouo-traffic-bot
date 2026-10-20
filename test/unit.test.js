@@ -6,6 +6,7 @@ const { analyze, registrableDomain } = require('../lib/phish');
 const { parseProxy } = require('../lib/proxies');
 const { assertPublicHttpUrl, isPublicIp } = require('../lib/urlsafe');
 const { sanitizeArgs } = require('../lib/browser');
+const { isShortenerHost } = require('../lib/visitor');
 
 test('registrableDomain handles multi-part public suffixes', () => {
   assert.equal(registrableDomain('apple.co.uk'), 'apple.co.uk');
@@ -82,4 +83,13 @@ test('SSRF guard blocks internal targets and non-http schemes', async () => {
 test('playwright-incompatible chromium flags are stripped', () => {
   const args = sanitizeArgs(['--no-sandbox', '--single-process', "--headless='shell'", '--headless']);
   assert.deepEqual(args, ['--no-sandbox']);
+});
+
+test('shortener hosts are recognised, destinations are not', () => {
+  assert.equal(isShortenerHost('ouo.io'), true);
+  assert.equal(isShortenerHost('www.ouo.io'), true);
+  assert.equal(isShortenerHost('ouo.press'), true);
+  assert.equal(isShortenerHost('example.com'), false);
+  assert.equal(isShortenerHost('notouo.io'), false);
+  assert.equal(isShortenerHost(''), false);
 });

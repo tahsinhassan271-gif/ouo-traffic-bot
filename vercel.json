@@ -1,13 +1,9 @@
 {
   "functions": {
     "api/*.js": {
-      "memory": 2048,
+      "memory": 1024,
       "maxDuration": 300,
-      "includeFiles": [
-        "node_modules/@sparticuz/chromium/**",
-        "links.json",
-        "data/stats.json"
-      ]
+      "includeFiles": "{links.json,node_modules/@sparticuz/chromium/**}"
     }
   }
 }

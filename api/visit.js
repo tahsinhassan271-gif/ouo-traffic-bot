@@ -6,9 +6,9 @@ const { checkAccess, denied } = require('../lib/auth');
 
 // Keep the whole handler comfortably inside vercel.json's maxDuration, browser
 // cold start included.
-const DEADLINE_MS = Number(process.env.VISIT_DEADLINE_MS || 90000);
-const PER_ATTEMPT_MS = 30000;
-const MAX_CANDIDATES = 4;
+const DEADLINE_MS = Number(process.env.VISIT_DEADLINE_MS || 150000);
+const PER_ATTEMPT_MS = 60000;
+const MAX_CANDIDATES = 2;
 
 module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
@@ -29,16 +29,20 @@ module.exports = async (req, res) => {
 
     for (const proxy of candidates) {
       const remaining = DEADLINE_MS - (Date.now() - started);
-      if (remaining < 12000) break;
+      if (remaining < 20000) break;
 
       const r = await attemptVisit(url, proxy, Math.min(remaining - 3000, PER_ATTEMPT_MS));
       attempts.push({
         proxy: proxy || 'direct',
         ok: r.ok,
         clicked: r.clicked,
+        clicks: r.clicks,
         blocked: r.blocked,
         completed: r.completed,
+        startHost: r.startHost,
+        finalHost: r.finalHost,
         final: r.final,
+        steps: r.steps,
         note: r.note,
       });
 

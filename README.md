@@ -22,9 +22,11 @@ human through rotating free proxies — generating views on paid shorteners.
    - `CRON_SECRET` = protects `/api/cron` (Vercel Cron sends it automatically as a Bearer token)
 7. Deploy.
 
-`vercel.json` asks for `maxDuration: 300` and `memory: 2048`, because a cold
-Chromium start plus a real visit does not fit in the old 60s / 1GB defaults. If
-your plan rejects 300s, lower `maxDuration` and `VISIT_DEADLINE_MS` together.
+`vercel.json` asks for `maxDuration: 300` (the project default) because a cold
+Chromium start plus a real visit does not fit in the old 60s budget. If you lower
+it, lower `VISIT_DEADLINE_MS` too. `includeFiles` must stay a single glob string -
+Vercel rejects an array with "includeFiles should be string" and the whole
+deployment fails before building.
 
 ## Turn on automation
 
@@ -56,22 +58,28 @@ Edit the `cron:` line in `.github/workflows/traffic.yml` (always UTC):
 ### What counts as a view
 
 A visit only counts when the page loaded, no Cloudflare/Turnstile challenge was
-still on screen, **and** we either clicked a continue control or ended up on a
-different hostname. Merely reaching the ouo.io landing page is reported as
-`FAILED ... no continue control found` instead of being counted. Every attempt
-in `/api/visit` returns `ok`, `clicked`, `blocked` and `completed` so you can see
-which step failed.
+still on screen, **and the browser actually left the shortener** - the final
+hostname must differ from the link you opened and must not be an `ouo.*` host.
+Clicking a button is not proof of anything, so it no longer counts on its own.
+
+Every attempt returns `ok`, `clicked`, `clicks`, `blocked`, `completed`,
+`startHost`, `finalHost` and a `steps` trace (which selector was clicked and
+where it navigated), so a miss tells you exactly where the flow stopped:
+`challenge not cleared`, `no enabled continue control`, or
+`never left ouo.io after N click(s)`.
 
 ## Reading your results
 
 - `data/stats.json` — lifetime views and per-run history
 - `data/history.csv` — per-visit audit trail (timestamp, link, proxy, result)
 
-The dashboard adds `data/stats.json` to its Redis counters, so the totals tile
-includes GitHub Actions runs. The line under the tiles shows the split
-(`dashboard X · bot Y`), and the newest log entries come from `/api/visit` and
-`/api/cron`. If the deployment cannot read `data/stats.json`, it says so instead
-of silently showing zero.
+The dashboard adds the GitHub Actions totals to its Redis counters, so the totals
+tile includes bot runs. Because a deployment is a snapshot, `/api/stats` reads
+`data/stats.json` from the bundle when present and otherwise fetches the committed
+file from the public repo (`BOT_STATS_REPO` / `BOT_STATS_BRANCH` override the
+default), cached for 60s. The line under the tiles shows the split and where the
+number came from, and the newest log entries come from `/api/visit` and
+`/api/cron`.
 
 ## Important
 
@@ -79,5 +87,15 @@ of silently showing zero.
   this bot uses ~20,000. Public repos are unlimited.
 - The 60-day GitHub inactivity rule is handled automatically because the bot
   commits to `data/` after every run.
-- Free proxies succeed roughly 1 in 3 times. The bot tries 4 per visit.
-- Earnings are real but modest: ~$1.50 per 1000 views.
+- Free proxies are ~1% alive: a typical run finds 5-35 usable exits out of 1000
+  probed. The bot tries up to 4 per visit and reuses the ones that have already
+  completed a visit before drawing new ones.
+- **Why the dashboard can show views while the shortener shows none.** Local
+  "views" only prove this script got past a page; the shortener pays only for
+  traffic its own fraud filter accepts. Free-proxy exit nodes are datacenter
+  and abused IP ranges that shorteners, ad networks and Cloudflare all score as
+  invalid, so the impressions they generate are discarded server-side. The
+  `completed` flag now requires actually reaching the destination, which is why
+  honest numbers will be much lower than the old ones. Getting past that filter
+  is a shortener anti-fraud problem, not a bug in this script.
+- Earnings are modest at best: ~$1.50 per 1000 *valid* views.

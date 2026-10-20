@@ -22,10 +22,12 @@ const BREAK_SECONDS = Number(process.env.BREAK_SECONDS || 180);
 const POOL_MIN = 20;
 const POOL_TARGET = 250;
 const MAX_TRIES_PER_VISIT = 4;
-const VISIT_BUDGET_MS = 40000;
+const VISIT_BUDGET_MS = 60000;
 
-const REFILL_BACKOFF_BASE_MS = 60 * 1000;
-const REFILL_BACKOFF_MAX_MS = 10 * 60 * 1000;
+// Refill pacing. A 1000-proxy health check costs ~7s of CPU; running it on every
+// attempt (the old behaviour) meant the bot spent most of the run validating.
+const REFILL_MIN_GAP_MS = 20 * 1000;
+const REFILL_BACKOFF_MAX_MS = 5 * 60 * 1000;
 
 fs.mkdirSync(DATA, { recursive: true });
 
@@ -58,7 +60,7 @@ const csvCell = (v) => {
 
 function appendCsv(cells) {
   if (!fs.existsSync(CSV)) {
-    fs.writeFileSync(CSV, 'timestamp,link,success,proxy,final,elapsed_ms\n');
+    fs.writeFileSync(CSV, 'timestamp,link,success,proxy,final,elapsed_ms,note\n');
   }
   fs.appendFileSync(CSV, cells.map(csvCell).join(',') + '\n');
 }
@@ -71,6 +73,8 @@ function loadLinks() {
 }
 
 let pool = [];
+let good = [];              // proxies that have produced a completed visit
+const proxyStats = new Map(); // proxy -> { ok, fail }
 let stats = null;
 let run = null;
 let finishing = false;
@@ -82,13 +86,10 @@ async function refillPool(force = false) {
   if (!force && pool.length >= POOL_MIN) return;
 
   if (!force) {
-    // Backoff: without it, an empty pool makes every single attempt re-run a
-    // 1000-proxy health check and the run never gets to visit anything.
-    const backoff = Math.min(
-      REFILL_BACKOFF_MAX_MS,
-      REFILL_BACKOFF_BASE_MS * 2 ** refillFailures
-    );
-    if (Date.now() - lastRefillAt < backoff) return;
+    const gap = refillFailures
+      ? Math.min(REFILL_BACKOFF_MAX_MS, REFILL_MIN_GAP_MS * 2 ** refillFailures)
+      : REFILL_MIN_GAP_MS;
+    if (Date.now() - lastRefillAt < gap) return;
   }
 
   lastRefillAt = Date.now();
@@ -103,10 +104,38 @@ async function refillPool(force = false) {
   pool = shuffle(live).slice(0, POOL_TARGET);
   refillFailures = live.length ? 0 : refillFailures + 1;
 
-  console.log(`[pool] ${live.length} live, holding ${pool.length}`);
+  console.log(`[pool] ${live.length} live, holding ${pool.length} (${good.length} proven)`);
 }
 
-const takeProxy = () => (pool.length ? pool.pop() : null);
+function recordProxy(proxy, ok) {
+  if (!proxy) return;
+  const s = proxyStats.get(proxy) || { ok: 0, fail: 0 };
+  if (ok) {
+    s.ok++;
+    s.fail = 0;
+    if (!good.includes(proxy)) good.unshift(proxy);
+    good = good.slice(0, 50);
+  } else {
+    s.fail++;
+    if (s.fail >= 2) good = good.filter((p) => p !== proxy);
+  }
+  proxyStats.set(proxy, s);
+}
+
+/**
+ * Prefer a proxy that already completed a visit, then an untried one.
+ * Free proxies are ~1% live, so a proven exit node is worth far more than
+ * another random draw.
+ */
+function takeProxy() {
+  while (good.length) {
+    const p = good.pop();
+    const s = proxyStats.get(p);
+    if (s && s.fail >= 2) continue;
+    return p;
+  }
+  return pool.length ? pool.pop() : null;
+}
 
 function finalize(exitCode) {
   if (finishing) return;
@@ -116,6 +145,7 @@ function finalize(exitCode) {
     if (stats && run) {
       run.finished = new Date().toISOString();
       run.poolAtEnd = pool.length;
+      run.provenProxies = good.length;
       saveStats(stats);
       console.log(`\n=== STOPPED === views ${run.views} / attempts ${run.attempts} | lifetime ${stats.lifetimeViews}`);
     }
@@ -181,6 +211,7 @@ async function main() {
       const r = await attemptVisit(link, proxy, VISIT_BUDGET_MS);
       run.attempts++;
       stats.lifetimeAttempts++;
+      recordProxy(proxy, r.completed);
 
       if (r.completed) {
         ok = true;
@@ -201,7 +232,10 @@ async function main() {
       (ok ? '' : ` (${note || 'no view'})`)
     );
 
-    appendCsv([new Date().toISOString(), link, ok ? 1 : 0, usedProxy || 'direct', finalUrl || '', elapsed]);
+    appendCsv([
+      new Date().toISOString(), link, ok ? 1 : 0,
+      usedProxy || 'direct', finalUrl || '', elapsed, note || '',
+    ]);
     saveStats(stats);
     sinceBreak++;
 
@@ -216,6 +250,7 @@ async function main() {
 
   run.finished = new Date().toISOString();
   run.poolAtEnd = pool.length;
+  run.provenProxies = good.length;
   saveStats(stats);
   await closeBrowser();
 
