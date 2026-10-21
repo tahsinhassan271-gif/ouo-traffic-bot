@@ -20,10 +20,10 @@ const BREAK_EVERY = Number(process.env.BREAK_EVERY || 30);
 const BREAK_SECONDS = Number(process.env.BREAK_SECONDS || 120);
 
 const POOL_MIN = 12;
-const POOL_TARGET = 300;
+const POOL_TARGET = 200;
 const SAMPLE = 1000;
-const MAX_TRIES = 4;
-const VISIT_BUDGET_MS = 40000;
+const MAX_TRIES = 3;
+const VISIT_BUDGET_MS = 45000;
 
 fs.mkdirSync(DATA, { recursive: true });
 
@@ -66,22 +66,20 @@ async function refillPool() {
     console.log(`[pool] ${raw.length} candidates, validating ${sample.length}...`);
     const t0 = Date.now();
 
-    // stage 1 - HTTPS tunnel works at all
+    // fastest-first
     let live = await validateProxies(sample, 300, 6000, false);
-    const ipifyCount = live.length;
+    if (live.length > 200) live = live.slice(0, 200);
 
-    // stage 2 - target reachable, but only keep it if it doesn't starve us
-    if (ipifyCount >= 15) {
-      const checked = await validateProxies(live, 60, 9000, true);
-      if (checked.length >= 10) {
-        live = checked;
-      } else {
-        console.log(`[pool] target check too strict (${checked.length}/${ipifyCount}), keeping all`);
-      }
+    // target-reachable proxies jump the queue, but nothing gets discarded
+    if (live.length) {
+      const passers = await validateProxies(live, 60, 9000, true);
+      const set = new Set(passers);
+      console.log(`[pool] ${passers.length}/${live.length} reach ouo.io directly`);
+      live = [...passers, ...live.filter((p) => !set.has(p))];
     }
 
     console.log(`[pool] ${live.length} live in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-    if (live.length) pool = shuffle(live).slice(0, POOL_TARGET);
+    if (live.length) pool = live.slice(0, POOL_TARGET).reverse(); // pop() = fastest first
   } finally {
     refilling = false;
   }
