@@ -23,7 +23,7 @@ const POOL_MIN = 12;
 const POOL_TARGET = 200;
 const SAMPLE = 1000;
 const MAX_TRIES = 3;
-const VISIT_BUDGET_MS = 40000;
+const VISIT_BUDGET_MS = 55000;
 
 fs.mkdirSync(DATA, { recursive: true });
 
@@ -40,7 +40,7 @@ const saveStats = (s) => { try { fs.writeFileSync(STATS, JSON.stringify(s, null,
 
 function appendCsv(row) {
   try {
-    if (!fs.existsSync(CSV)) fs.writeFileSync(CSV, 'timestamp,link,success,proxy,cleared,clicks,final,elapsed_ms\n');
+    if (!fs.existsSync(CSV)) fs.writeFileSync(CSV, 'timestamp,link,success,proxy,cf,cleared,clicks,final,elapsed_ms\n');
     fs.appendFileSync(CSV, row + '\n');
   } catch {}
 }
@@ -110,7 +110,7 @@ async function main() {
   if (process.env.DIRECT_PROBE !== '0') {
     console.log('[probe] testing flow with NO proxy (runner IP)...');
     const r = await attemptVisit(links[0], null, VISIT_BUDGET_MS);
-    console.log(`[probe] ok=${r.ok} cleared=${r.cleared} clicks=${r.clicks} done=${r.completed} note=${r.note}`);
+    console.log(`[probe] ok=${r.ok} cf=${r.cf} cleared=${r.cleared} clicks=${r.clicks} done=${r.completed} note=${r.note}`);
     if (r.dbg) console.log('[probe-dbg] ' + JSON.stringify(r.dbg));
   }
 
@@ -121,7 +121,7 @@ async function main() {
     }
 
     const link = links[run.attempts % links.length];
-    let ok = false, usedProxy = null, cleared = false, clicks = 0, finalUrl = null;
+    let ok = false, usedProxy = null, cf = false, cleared = false, clicks = 0, finalUrl = null;
     const t0 = Date.now();
 
     console.log(`[visit] ${link.slice(-8)} pool=${pool.length}`);
@@ -134,13 +134,13 @@ async function main() {
       stats.lifetimeAttempts++;
 
       console.log(
-        `[try${t + 1}] ${proxy || 'direct'} ok=${r.ok} cleared=${r.cleared} clicks=${r.clicks} ` +
-        `done=${r.completed} ${Date.now() - rt0}ms${r.note ? ' | ' + r.note : ''}`
+        `[try${t + 1}] ${proxy || 'direct'} ok=${r.ok} cf=${r.cf} cleared=${r.cleared} ` +
+        `clicks=${r.clicks} done=${r.completed} ${Date.now() - rt0}ms${r.note ? ' | ' + r.note : ''}`
       );
       if (r.dbg) console.log('        dbg=' + JSON.stringify(r.dbg));
 
       if (r.completed) {
-        ok = true; usedProxy = proxy; cleared = r.cleared; clicks = r.clicks; finalUrl = r.final;
+        ok = true; usedProxy = proxy; cf = r.cf; cleared = r.cleared; clicks = r.clicks; finalUrl = r.final;
         break;
       }
     }
@@ -150,11 +150,11 @@ async function main() {
 
     console.log(
       `[${new Date().toISOString().slice(11, 19)}] ${ok ? 'VIEW' : 'MISS'} ` +
-      `link=${link.slice(-8)} cleared=${cleared} clicks=${clicks} ` +
+      `link=${link.slice(-8)} cf=${cf} cleared=${cleared} clicks=${clicks} ` +
       `run=${run.views}/${run.attempts} life=${stats.lifetimeViews} ${elapsed}ms`
     );
 
-    appendCsv([new Date().toISOString(), link, ok ? 1 : 0, usedProxy || '', cleared ? 1 : 0, clicks, finalUrl || '', elapsed].join(','));
+    appendCsv([new Date().toISOString(), link, ok ? 1 : 0, usedProxy || '', cf ? 1 : 0, cleared ? 1 : 0, clicks, finalUrl || '', elapsed].join(','));
     saveStats(stats);
     sinceBreak++;
 
