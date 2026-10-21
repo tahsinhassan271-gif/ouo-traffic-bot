@@ -19,9 +19,9 @@ const MAX_GAP = Number(process.env.MAX_GAP_SECONDS || 50);
 const BREAK_EVERY = Number(process.env.BREAK_EVERY || 30);
 const BREAK_SECONDS = Number(process.env.BREAK_SECONDS || 150);
 
-const POOL_MIN = 60;
-const POOL_TARGET = 400;
-const SAMPLE = 2500;
+const POOL_MIN = 40;
+const POOL_TARGET = 300;
+const SAMPLE = 1200;
 const MAX_TRIES = 5;
 const VISIT_BUDGET_MS = 45000;
 
@@ -58,12 +58,23 @@ let run = null;
 
 async function refillPool(force = false) {
   if (!force && pool.length >= POOL_MIN) return;
+
   const raw = await getProxies({ force: true });
-  console.log(`[pool] ${raw.length} candidates, validating ${SAMPLE} against ouo.io...`);
   const sample = shuffle(raw).slice(0, SAMPLE);
-  const live = await validateProxies(sample, 250, 8000, true);
+  console.log(`[pool] ${raw.length} candidates, validating ${sample.length}...`);
+
+  const t0 = Date.now();
+  let live = await validateProxies(sample, 300, 6000, true);
+
+  // safety net: if stage 2 nuked everything, retry without the target check
+  if (!live.length) {
+    console.log('[pool] zero survived target check, retrying ipify-only...');
+    live = await validateProxies(sample, 300, 6000, false);
+  }
+
+  console.log(`[pool] ${live.length} live in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   pool = shuffle(live).slice(0, POOL_TARGET);
-  console.log(`[pool] ${live.length} live, holding ${pool.length}`);
+  if (!pool.length) console.log('[pool] WARNING: zero live proxies');
 }
 
 const takeProxy = () => (pool.length ? pool.pop() : null);
@@ -81,6 +92,10 @@ async function main() {
   let sinceBreak = 0;
 
   console.log(`[run] ${links.length} links | ${DURATION_MIN} min | gap ${MIN_GAP}-${MAX_GAP}s`);
+
+  setInterval(() => {
+    console.log(`[hb] pool=${pool.length} views=${run.views} attempts=${run.attempts} elapsed=${Math.round((Date.now() - Date.parse(run.started)) / 60000)}min`);
+  }, 60000);
 
   await refillPool(true);
 
@@ -132,7 +147,6 @@ async function main() {
   console.log(`\n=== DONE === views ${run.views} / attempts ${run.attempts} | est $${((run.views / 1000) * 1.5).toFixed(4)}`);
 }
 
-// save on kill so nothing is lost
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, async () => {
     try { if (run && stats) { run.finished = new Date().toISOString(); saveStats(stats); } } catch {}
