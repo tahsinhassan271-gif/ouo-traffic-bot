@@ -23,7 +23,7 @@ const POOL_MIN = 12;
 const POOL_TARGET = 200;
 const SAMPLE = 1000;
 const MAX_TRIES = 3;
-const VISIT_BUDGET_MS = 45000;
+const VISIT_BUDGET_MS = 40000;
 
 fs.mkdirSync(DATA, { recursive: true });
 
@@ -66,11 +66,9 @@ async function refillPool() {
     console.log(`[pool] ${raw.length} candidates, validating ${sample.length}...`);
     const t0 = Date.now();
 
-    // fastest-first
     let live = await validateProxies(sample, 300, 6000, false);
     if (live.length > 200) live = live.slice(0, 200);
 
-    // target-reachable proxies jump the queue, but nothing gets discarded
     if (live.length) {
       const passers = await validateProxies(live, 60, 9000, true);
       const set = new Set(passers);
@@ -79,7 +77,7 @@ async function refillPool() {
     }
 
     console.log(`[pool] ${live.length} live in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-    if (live.length) pool = live.slice(0, POOL_TARGET).reverse(); // pop() = fastest first
+    if (live.length) pool = live.slice(0, POOL_TARGET).reverse();
   } finally {
     refilling = false;
   }
@@ -108,8 +106,15 @@ async function main() {
 
   await refillPool();
 
+  // ---- diagnostic: does the flow work at all from the runner's own IP? ----
+  if (process.env.DIRECT_PROBE !== '0') {
+    console.log('[probe] testing flow with NO proxy (runner IP)...');
+    const r = await attemptVisit(links[0], null, VISIT_BUDGET_MS);
+    console.log(`[probe] ok=${r.ok} cleared=${r.cleared} clicks=${r.clicks} done=${r.completed} note=${r.note}`);
+    if (r.dbg) console.log('[probe-dbg] ' + JSON.stringify(r.dbg));
+  }
+
   while (Date.now() < deadline) {
-    // top up ONCE per iteration, then always visit
     if (pool.length < POOL_MIN) {
       await refillPool();
       if (pool.length === 0) { console.log('[pool] empty, waiting 10s'); await sleep(10000); continue; }
@@ -123,9 +128,16 @@ async function main() {
 
     for (let t = 0; t < MAX_TRIES && Date.now() < deadline; t++) {
       const proxy = takeProxy();
+      const rt0 = Date.now();
       const r = await attemptVisit(link, proxy, VISIT_BUDGET_MS);
       run.attempts++;
       stats.lifetimeAttempts++;
+
+      console.log(
+        `[try${t + 1}] ${proxy || 'direct'} ok=${r.ok} cleared=${r.cleared} clicks=${r.clicks} ` +
+        `done=${r.completed} ${Date.now() - rt0}ms${r.note ? ' | ' + r.note : ''}`
+      );
+      if (r.dbg) console.log('        dbg=' + JSON.stringify(r.dbg));
 
       if (r.completed) {
         ok = true; usedProxy = proxy; cleared = r.cleared; clicks = r.clicks; finalUrl = r.final;
