@@ -1,0 +1,14 @@
+{
+  "lifetimeViews": 0,
+  "lifetimeAttempts": 8,
+  "firstRun": "2026-10-21T16:55:05.326Z",
+  "runs": [
+    {
+      "started": "2026-10-21T16:55:05.326Z",
+      "durationMinutes": 30,
+      "views": 0,
+      "attempts": 8,
+      "links": 4
+    }
+  ]
+}
