@@ -1,85 +1,58 @@
 'use strict';
-const { getProxies, shuffle } = require('../lib/proxies');
+const { getProxies, validateProxies, shuffle } = require('../lib/proxies');
 const { attemptVisit } = require('../lib/visitor');
 const store = require('../lib/store');
-const { checkAccess, denied } = require('../lib/auth');
 
-// Keep the whole handler comfortably inside vercel.json's maxDuration, browser
-// cold start included.
-const DEADLINE_MS = Number(process.env.VISIT_DEADLINE_MS || 150000);
-const PER_ATTEMPT_MS = 60000;
-const MAX_CANDIDATES = 2;
+const DEADLINE_MS = 52000;
 
 module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
-
-  if (!checkAccess(req)) return denied(res);
-
   try {
     const url = String(req.query.url || (req.body && req.body.url) || '').trim();
-    if (!url) return res.status(400).json({ success: false, error: 'Missing ?url=' });
+    if (!url) return res.status(200).json({ success: false, error: 'Missing ?url=' });
 
     const started = Date.now();
-    const pool = await getProxies().catch(() => []);
-    const candidates = shuffle(pool).slice(0, MAX_CANDIDATES);
-    candidates.push(null);
+    const pool = await getProxies();
+
+    // validate a batch in parallel first so we don't waste the budget on dead proxies
+    const candidates = shuffle(pool).slice(0, 40);
+    const live = await validateProxies(candidates, 40, 6000, false);
+    const queue = (live.length ? shuffle(live) : shuffle(pool)).slice(0, 4);
 
     const attempts = [];
     let winner = null;
 
-    for (const proxy of candidates) {
+    for (const proxy of queue) {
       const remaining = DEADLINE_MS - (Date.now() - started);
-      if (remaining < 20000) break;
+      if (remaining < 12000) break;
 
-      const r = await attemptVisit(url, proxy, Math.min(remaining - 3000, PER_ATTEMPT_MS));
+      const r = await attemptVisit(url, proxy, Math.min(remaining - 1500, 32000));
       attempts.push({
-        proxy: proxy || 'direct',
-        ok: r.ok,
-        clicked: r.clicked,
-        clicks: r.clicks,
-        blocked: r.blocked,
-        completed: r.completed,
-        startHost: r.startHost,
-        finalHost: r.finalHost,
-        final: r.final,
-        steps: r.steps,
-        note: r.note,
+        proxy: proxy || 'direct', ok: r.ok, cleared: r.cleared,
+        clicks: r.clicks, completed: r.completed, final: r.final, note: r.note,
       });
 
-      if (r.completed) { winner = r; winner.proxy = proxy; break; }
+      if (r.completed) { winner = r; break; }
     }
 
-    // Count every candidate that was actually tried, not one per request.
-    await store.bump('attempts', attempts.length).catch(() => {});
+    await store.bump('attempts', 1).catch(() => {});
     if (winner) await store.bump('views', 1).catch(() => {});
-
-    const entry = {
-      at: new Date().toISOString(),
-      source: 'dashboard',
-      url,
-      success: Boolean(winner),
-      proxy: winner ? winner.proxy || 'direct' : null,
-      final: winner ? winner.final : null,
-      tries: attempts.length,
-      elapsedMs: Date.now() - started,
-    };
-    await store.pushLog(entry).catch(() => {});
 
     return res.status(200).json({
       success: Boolean(winner),
       url,
       final: winner ? winner.final : null,
-      proxyUsed: winner ? winner.proxy || 'direct' : null,
-      elapsedMs: entry.elapsedMs,
+      proxyUsed: winner ? winner.proxy : null,
+      elapsedMs: Date.now() - started,
       poolSize: pool.length,
+      liveCount: live.length,
       attempts,
     });
   } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error('[visit] failed', e);
-    return res.status(500).json({
+    return res.status(200).json({
       success: false,
       error: String((e && e.message) || e),
+      where: String((e && e.stack) || '').split('\n')[1] || '',
       elapsedMs: -1,
       attempts: [],
     });
