@@ -23,7 +23,7 @@ const POOL_MIN = 12;
 const POOL_TARGET = 200;
 const SAMPLE = 1000;
 const MAX_TRIES = 2;
-const VISIT_BUDGET_MS = 90000;
+const VISIT_BUDGET_MS = 100000;
 
 fs.mkdirSync(DATA, { recursive: true });
 
