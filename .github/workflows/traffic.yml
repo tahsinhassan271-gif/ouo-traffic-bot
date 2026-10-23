@@ -43,10 +43,10 @@ jobs:
           USE_LOCAL_CHROMIUM: '1'
           DURATION_MINUTES: ${{ github.event.inputs.minutes || '180' }}
           TARGET_VIEWS: ${{ github.event.inputs.target_views || '0' }}
-          MIN_GAP_SECONDS: '15'
-          MAX_GAP_SECONDS: '50'
-          BREAK_EVERY: '30'
-          BREAK_SECONDS: '150'
+          MIN_GAP_SECONDS: '3'
+          MAX_GAP_SECONDS: '12'
+          BREAK_EVERY: '20'
+          BREAK_SECONDS: '90'
         run: node bot/run.js
 
       - name: Commit results
