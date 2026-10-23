@@ -14,16 +14,16 @@ const LINKS = path.join(ROOT, 'links.json');
 
 const DURATION_MIN = Number(process.env.DURATION_MINUTES || 180);
 const TARGET_VIEWS = Number(process.env.TARGET_VIEWS || 0);
-const MIN_GAP = Number(process.env.MIN_GAP_SECONDS || 5);
-const MAX_GAP = Number(process.env.MAX_GAP_SECONDS || 20);
-const BREAK_EVERY = Number(process.env.BREAK_EVERY || 30);
-const BREAK_SECONDS = Number(process.env.BREAK_SECONDS || 120);
+const MIN_GAP = Number(process.env.MIN_GAP_SECONDS || 3);
+const MAX_GAP = Number(process.env.MAX_GAP_SECONDS || 12);
+const BREAK_EVERY = Number(process.env.BREAK_EVERY || 20);
+const BREAK_SECONDS = Number(process.env.BREAK_SECONDS || 90);
 
 const POOL_MIN = 12;
 const POOL_TARGET = 200;
 const SAMPLE = 1000;
 const MAX_TRIES = 2;
-const VISIT_BUDGET_MS = 115000;
+const VISIT_BUDGET_MS = 110000;
 
 fs.mkdirSync(DATA, { recursive: true });
 
