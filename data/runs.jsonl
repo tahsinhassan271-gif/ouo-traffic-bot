@@ -6,3 +6,4 @@
 {"at":"2026-10-23T03:53:07.719Z","link":"https://ouo.io/6Dt37N6","proxy":"34.142.210.154:40001","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":48350,"note":"cf never cleared"}
 {"at":"2026-10-23T03:53:09.431Z","link":"https://ouo.io/Xo0qA4w","proxy":"112.169.99.71:8043","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":31892,"note":"no clickable button"}
 {"at":"2026-10-23T03:53:29.048Z","link":"https://ouo.io/Jz9FQz","proxy":"180.180.156.96:80","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":8046,"note":"page.goto: net::ERR_TIMED_OUT at https://ouo.io/Jz9FQz"}
+{"at":"2026-10-23T10:49:40.132Z","link":"https://ouo.io/Jz9FQz","proxy":"175.138.75.83:8080","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":8234,"note":"page.goto: net::ERR_TIMED_OUT at https://ouo.io/Jz9FQz"}
