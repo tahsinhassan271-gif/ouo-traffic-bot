@@ -41,3 +41,31 @@
 {"at":"2026-10-23T16:18:33.211Z","link":"https://ouo.io/Jz9FQz","proxy":"213.131.85.28:1976","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":433,"note":"page.goto: net::ERR_CONNECTION_RESET at https://ouo.io/Jz9FQz"}
 {"at":"2026-10-23T16:18:37.644Z","link":"https://ouo.io/h2vqw8Y","proxy":"27.185.218.213:17981","ok":true,"cf":false,"hops":0,"clicks":0,"done":false,"ms":8548,"note":"no clickable button"}
 {"at":"2026-10-23T16:18:48.259Z","link":"https://ouo.io/6Dt37N6","proxy":"163.227.248.81:8818","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":8056,"note":"page.goto: net::ERR_TIMED_OUT at https://ouo.io/6Dt37N6"}
+{"at":"2026-10-23T20:46:06.815Z","link":"https://ouo.io/6Dt37N6","proxy":"1.10.248.240:80","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":9221,"note":"no clickable button"}
+{"at":"2026-10-23T20:46:07.874Z","link":"https://ouo.io/Jz9FQz","proxy":"120.232.115.170:17981","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":10375,"note":"no clickable button"}
+{"at":"2026-10-23T20:46:20.924Z","link":"https://ouo.io/Xo0qA4w","proxy":"190.97.227.9:999","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":8047,"note":"page.goto: net::ERR_TIMED_OUT at https://ouo.io/Xo0qA4w"}
+{"at":"2026-10-23T20:46:24.068Z","link":"https://ouo.io/h2vqw8Y","proxy":"147.45.164.178:8888","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":7213,"note":"no clickable button"}
+{"at":"2026-10-23T20:46:37.928Z","link":"https://ouo.io/Jz9FQz","proxy":"102.244.78.61:8087","ok":true,"cf":false,"hops":0,"clicks":0,"done":false,"ms":10912,"note":"no clickable button"}
+{"at":"2026-10-23T20:46:48.440Z","link":"https://ouo.io/6Dt37N6","proxy":"181.78.203.3:999","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":18500,"note":"no clickable button"}
+{"at":"2026-10-23T20:46:52.283Z","link":"https://ouo.io/Xo0qA4w","proxy":"42.115.72.47:2112","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":8046,"note":"page.goto: net::ERR_TIMED_OUT at https://ouo.io/Xo0qA4w"}
+{"at":"2026-10-23T20:47:00.056Z","link":"https://ouo.io/Jz9FQz","proxy":"8.219.97.248:80","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":436,"note":"page.goto: net::ERR_CONNECTION_RESET at https://ouo.io/Jz9FQz"}
+{"at":"2026-10-23T20:47:11.245Z","link":"https://ouo.io/6Dt37N6","proxy":"1.10.248.237:80","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":1367,"note":"page.goto: net::ERR_CONNECTION_RESET at https://ouo.io/6Dt37N6"}
+{"at":"2026-10-23T20:47:17.700Z","link":"https://ouo.io/h2vqw8Y","proxy":"181.79.217.1:8080","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":22036,"note":"no clickable button"}
+{"at":"2026-10-23T20:47:23.639Z","link":"https://ouo.io/Xo0qA4w","proxy":"45.195.105.20:8080","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":943,"note":"page.goto: net::ERR_CONNECTION_RESET at https://ouo.io/Xo0qA4w"}
+{"at":"2026-10-23T20:47:35.019Z","link":"https://ouo.io/h2vqw8Y","proxy":"190.29.25.245:3128","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":8046,"note":"page.goto: net::ERR_TIMED_OUT at https://ouo.io/h2vqw8Y"}
+{"at":"2026-10-23T20:47:46.425Z","link":"https://ouo.io/Jz9FQz","proxy":"151.243.153.157:8118","ok":true,"cf":false,"hops":0,"clicks":0,"done":false,"ms":18138,"note":"no clickable button"}
+{"at":"2026-10-23T20:47:54.680Z","link":"https://ouo.io/6Dt37N6","proxy":"102.244.78.61:8083","ok":true,"cf":false,"hops":0,"clicks":0,"done":false,"ms":10890,"note":"no clickable button"}
+{"at":"2026-10-23T20:48:01.944Z","link":"https://ouo.io/Xo0qA4w","proxy":"45.198.10.130:8080","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":8040,"note":"page.goto: net::ERR_TIMED_OUT at https://ouo.io/Xo0qA4w"}
+{"at":"2026-10-23T20:48:20.965Z","link":"https://ouo.io/Jz9FQz","proxy":"102.244.78.61:8090","ok":true,"cf":false,"hops":0,"clicks":0,"done":false,"ms":10915,"note":"no clickable button"}
+{"at":"2026-10-23T20:48:23.919Z","link":"https://ouo.io/h2vqw8Y","proxy":"103.173.162.61:8080","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":22540,"note":"no clickable button"}
+{"at":"2026-10-23T20:48:34.082Z","link":"https://ouo.io/6Dt37N6","proxy":"160.19.19.9:8080","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":7066,"note":"page.goto: net::ERR_CONNECTION_RESET at https://ouo.io/6Dt37N6"}
+{"at":"2026-10-23T20:48:59.258Z","link":"https://ouo.io/h2vqw8Y","proxy":"165.99.151.252:8080","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":13482,"note":"no clickable button"}
+{"at":"2026-10-23T20:49:04.520Z","link":"https://ouo.io/Xo0qA4w","proxy":"203.201.190.30:8080","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":29654,"note":"no clickable button"}
+{"at":"2026-10-23T20:49:14.309Z","link":"https://ouo.io/Jz9FQz","proxy":"103.189.117.82:1111","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":8053,"note":"page.goto: net::ERR_TIMED_OUT at https://ouo.io/Jz9FQz"}
+{"at":"2026-10-23T20:49:56.313Z","link":"https://ouo.io/6Dt37N6","proxy":"103.180.123.47:8080","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":32110,"note":"no clickable button"}
+{"at":"2026-10-23T20:50:11.222Z","link":"https://ouo.io/Xo0qA4w","proxy":"103.39.51.160:80","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":9691,"note":"no clickable button"}
+{"at":"2026-10-23T20:50:35.390Z","link":"https://ouo.io/Jz9FQz","proxy":"46.4.78.103:3128","ok":false,"cf":false,"hops":0,"clicks":0,"done":false,"ms":869,"note":"page.goto: net::ERR_EMPTY_RESPONSE at https://ouo.io/Jz9FQz"}
+{"at":"2026-10-23T20:50:53.257Z","link":"https://ouo.io/h2vqw8Y","proxy":"195.158.8.123:3128","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":35622,"note":"no clickable button"}
+{"at":"2026-10-23T20:51:08.672Z","link":"https://ouo.io/6Dt37N6","proxy":"43.156.66.78:12345","ok":true,"cf":false,"hops":0,"clicks":0,"done":false,"ms":25821,"note":"no clickable button"}
+{"at":"2026-10-23T20:51:14.961Z","link":"https://ouo.io/Xo0qA4w","proxy":"1.10.248.242:80","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":12059,"note":"no clickable button"}
+{"at":"2026-10-23T20:51:32.287Z","link":"https://ouo.io/Jz9FQz","proxy":"140.227.61.201:3128","ok":true,"cf":true,"hops":0,"clicks":0,"done":false,"ms":10834,"note":"no clickable button"}
