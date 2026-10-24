@@ -14,13 +14,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const DURATION_MIN = int(process.env.DURATION_MINUTES, 20);
 const TARGET_VIEWS = int(process.env.TARGET_VIEWS, 0);
-const MIN_GAP = int(process.env.MIN_GAP_SECONDS, 3);
-const MAX_GAP = int(process.env.MAX_GAP_SECONDS, 12);
-const BREAK_EVERY = int(process.env.BREAK_EVERY, 20);
-const BREAK_SEC = int(process.env.BREAK_SECONDS, 90);
-const WORKERS = Math.max(1, int(process.env.WORKERS, 2));
-const POOL_MIN = int(process.env.POOL_MIN, 8);
-const VISIT_BUDGET = int(process.env.VISIT_BUDGET_MS, 95000);
+const MIN_GAP = int(process.env.MIN_GAP_SECONDS, 2);
+const MAX_GAP = int(process.env.MAX_GAP_SECONDS, 8);
+const BREAK_EVERY = int(process.env.BREAK_EVERY, 25);
+const BREAK_SEC = int(process.env.BREAK_SECONDS, 60);
+const WORKERS = Math.max(1, int(process.env.WORKERS, 3));
+const POOL_MIN = int(process.env.POOL_MIN, 10);
+const VISIT_BUDGET = int(process.env.VISIT_BUDGET_MS, 80000);
 
 const START = Date.now();
 const DEADLINE = START + DURATION_MIN * 60000;
@@ -28,11 +28,12 @@ const DEADLINE = START + DURATION_MIN * 60000;
 const { attemptVisit } = require('../lib/visitor');
 const { closeBrowser } = require('../lib/browser');
 
+process.on('unhandledRejection', r => console.log('[unhandled]', String((r && r.message) || r)));
+
 function safeRequire(p) {
   try { return require(p); } catch (e) { console.log('[warn] require', p, '-', e.message); return null; }
 }
 
-/* ---------------- links ---------------- */
 function loadLinks() {
   try {
     const raw = JSON.parse(fs.readFileSync(LINKS_FILE, 'utf8'));
@@ -44,7 +45,6 @@ function loadLinks() {
   }
 }
 
-/* ---------------- stats (normalised — this was the crash) ---------------- */
 function loadStats() {
   let s = null;
   try { s = JSON.parse(fs.readFileSync(STATS_FILE, 'utf8')); } catch (_) {}
@@ -137,7 +137,7 @@ async function buildPool(state) {
   }
   if (live.length < 5) {
     console.log('[pool] falling back to built-in validation...');
-    live = await naiveValidate(list, 700);
+    live = await naiveValidate(list, 900);
   }
   state.pool.push(...shuffle(live));
   console.log(`[pool] ${state.pool.length} live`);
@@ -152,14 +152,14 @@ async function refill(state) {
     const fn = P && (P.getProxies || P.fetchProxies || P.collectProxies);
     if (typeof fn !== 'function') return;
     const r = await fn();
-    const list = shuffle(normalizeProxies(Array.isArray(r) ? r : (r && (r.proxies || r.list)) || [])).slice(0, 600);
+    const list = shuffle(normalizeProxies(Array.isArray(r) ? r : (r && (r.proxies || r.list)) || [])).slice(0, 700);
     if (!list.length) return;
     const vf = P && (P.validateProxies || P.validate);
     let live = typeof vf === 'function'
       ? normalizeProxies(await vf(list, { log: () => {} }))
-      : await naiveValidate(list, 400);
+      : await naiveValidate(list, 500);
     const have = new Set(state.pool);
-    live = live.filter(p => !have.has(p));
+    live = live.filter(p => !have.has(p) && (state.bad.get(p) || 0) < 2);
     state.pool.push(...live);
     console.log(`[pool] refill +${live.length} -> ${state.pool.length}`);
   } catch (e) {
@@ -169,7 +169,7 @@ async function refill(state) {
   }
 }
 
-/* ---------------- attempt race (second safety net) ---------------- */
+/* ---------------- attempt race ---------------- */
 function raceAttempt(p, ms) {
   let t = null;
   const guard = new Promise(res => {
@@ -204,26 +204,35 @@ async function worker(state, stats, links) {
     const tag = link.replace(/^https?:\/\/[^/]+/, '');
     state.attempts++;
     stats.attempts++;
-    stats.lifetimeAttempts = (stats.lifetimeAttempts || 0) + 1;
+    stats.lifetimeAttempts++;
 
     console.log(`${IND}[visit] ${tag} pool=${state.pool.length}`);
-    const res = await raceAttempt(attemptVisit(proxy, link, { log: console.log }), VISIT_BUDGET + 20000);
+    const res = await raceAttempt(attemptVisit(proxy, link, { log: console.log }), VISIT_BUDGET + 15000);
 
     const t = new Date().toISOString().slice(11, 19);
     console.log(`${IND}[try] ${proxy} ok=${res.ok} cf=${res.cf} hops=${res.hops} cleared=${res.cleared} clicks=${res.clicks} done=${res.done} ${res.ms}ms${res.note ? ' | ' + res.note : ''}`);
-    if (res.dbg) console.log(`${IND}dbg=${JSON.stringify(res.dbg).slice(0, 400)}`);
+    if (res.dbg) console.log(`${IND}dbg=${JSON.stringify(res.dbg).slice(0, 320)}`);
 
     if (!stats.links[tag] || typeof stats.links[tag] !== 'object') stats.links[tag] = { views: 0, attempts: 0 };
     stats.links[tag].attempts++;
+
+    const good = res.ok && res.cleared;
+    if (good) {
+      state.bad.delete(proxy);
+      state.pool.push(proxy);                 // proven proxy -> requeue (warm context)
+    } else {
+      const f = (state.bad.get(proxy) || 0) + 1;
+      if (f >= 2) state.bad.delete(proxy); else state.bad.set(proxy, f);
+    }
 
     if (res.done) {
       state.views++;
       stats.views++;
       stats.links[tag].views++;
-      stats.lifetimeViews = (stats.lifetimeViews || 0) + 1;
+      stats.lifetimeViews++;
       console.log(`[${t}] VIEW link=${tag} cf=${res.cf} hops=${res.hops} clicks=${res.clicks} run=${state.views}/${state.attempts} life=${stats.lifetimeViews} ${res.ms}ms`);
     } else {
-      console.log(`[${t}] MISS link=${tag} cf=${res.cf} hops=${res.hops} clicks=${res.clicks} run=${state.views}/${state.attempts} life=${stats.lifetimeViews || 0} ${res.ms}ms`);
+      console.log(`[${t}] MISS link=${tag} cf=${res.cf} hops=${res.hops} clicks=${res.clicks} run=${state.views}/${state.attempts} life=${stats.lifetimeViews} ${res.ms}ms`);
     }
 
     logRun(link, res);
@@ -247,7 +256,10 @@ async function main() {
   console.log(`[run] ${links.length} links | ${DURATION_MIN} min | gap ${MIN_GAP}-${MAX_GAP}s | workers ${WORKERS}`);
 
   const stats = loadStats();
-  const state = { pool: [], refilling: false, stop: false, views: 0, attempts: 0, li: 0, sinceBreak: 0 };
+  const state = {
+    pool: [], refilling: false, stop: false, views: 0, attempts: 0, li: 0,
+    sinceBreak: 0, bad: new Map(),
+  };
 
   await buildPool(state);
 
@@ -256,16 +268,10 @@ async function main() {
     console.log(`[hb] pool=${state.pool.length} views=${state.views} attempts=${state.attempts} elapsed=${el}min`);
   }, 60000);
 
-  const workers = [];
-  for (let i = 0; i < WORKERS; i++) workers.push(worker(state, stats, links));
-  const settled = await Promise.allSettled(workers);
+  await Promise.allSettled(Array.from({ length: WORKERS }, () => worker(state, stats, links)));
 
   clearInterval(hb);
   saveStats(stats);
-
-  for (const s of settled) {
-    if (s.status === 'rejected') console.log('[worker] died:', String((s.reason && s.reason.message) || s.reason));
-  }
 
   console.log(`\n=== DONE === views ${state.views} / attempts ${state.attempts} | est $${(state.views * 0.0015).toFixed(4)}`);
 
