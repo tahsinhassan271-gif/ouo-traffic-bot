@@ -19,7 +19,7 @@ const MAX_GAP = int(process.env.MAX_GAP_SECONDS, 8);
 const BREAK_EVERY = int(process.env.BREAK_EVERY, 25);
 const BREAK_SEC = int(process.env.BREAK_SECONDS, 60);
 const WORKERS = Math.max(1, int(process.env.WORKERS, 3));
-const POOL_MIN = int(process.env.POOL_MIN, 10);
+const POOL_MIN = int(process.env.POOL_MIN, 12);
 const VISIT_BUDGET = int(process.env.VISIT_BUDGET_MS, 80000);
 
 const START = Date.now();
@@ -69,12 +69,11 @@ function logRun(link, res) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.appendFileSync(RUNS_FILE, JSON.stringify({
       at: new Date().toISOString(), link, proxy: res.proxy, ok: res.ok, cf: res.cf,
-      hops: res.hops, clicks: res.clicks, done: res.done, ms: res.ms, note: res.note,
+      hops: res.hops, clicks: res.clicks, paid: !!res.paid, done: res.done, ms: res.ms, note: res.note,
     }) + '\n');
   } catch (_) {}
 }
 
-/* ---------------- proxies ---------------- */
 function normalizeProxies(a) {
   return (a || []).map(x => {
     if (!x) return null;
@@ -150,16 +149,31 @@ async function refill(state) {
   try {
     const P = safeRequire('../lib/proxies');
     const fn = P && (P.getProxies || P.fetchProxies || P.collectProxies);
-    if (typeof fn !== 'function') return;
-    const r = await fn();
-    const list = shuffle(normalizeProxies(Array.isArray(r) ? r : (r && (r.proxies || r.list)) || [])).slice(0, 700);
-    if (!list.length) return;
-    const vf = P && (P.validateProxies || P.validate);
-    let live = typeof vf === 'function'
-      ? normalizeProxies(await vf(list, { log: () => {} }))
-      : await naiveValidate(list, 500);
+    let live = [];
+
+    if (typeof fn === 'function') {
+      let r;
+      try { r = await fn({ force: true }); } catch (_) { r = await fn(); }
+      const list = shuffle(normalizeProxies(Array.isArray(r) ? r : (r && (r.proxies || r.list)) || [])).slice(0, 900);
+      if (list.length) {
+        const vf = P && (P.validateProxies || P.validate);
+        live = typeof vf === 'function'
+          ? normalizeProxies(await vf(list, { log: () => {} }))
+          : await naiveValidate(list, 700);
+      }
+    }
+
     const have = new Set(state.pool);
-    live = live.filter(p => !have.has(p) && (state.bad.get(p) || 0) < 2);
+    live = live.filter(p => !have.has(p));
+
+    /* fresh fetch is cached -> recycle previously dropped proxies instead of starving */
+    if (live.length < 5 && state.dropped.length) {
+      const recycled = shuffle(state.dropped).slice(0, 30).filter(p => !have.has(p));
+      state.dropped.length = 0;
+      live = live.concat(recycled);
+    }
+    if (!live.length) return;
+
     state.pool.push(...live);
     console.log(`[pool] refill +${live.length} -> ${state.pool.length}`);
   } catch (e) {
@@ -169,25 +183,24 @@ async function refill(state) {
   }
 }
 
-/* ---------------- attempt race ---------------- */
 function raceAttempt(p, ms) {
   let t = null;
   const guard = new Promise(res => {
     t = setTimeout(() => res({
-      ok: false, cf: false, hops: 0, cleared: false, clicks: 0, done: false,
-      note: 'HARD TIMEOUT', ms, dbg: null,
+      ok: false, cf: false, hops: 0, cleared: false, clicks: 0,
+      paid: false, done: false, note: 'HARD TIMEOUT', ms, dbg: null,
     }), ms);
   });
   return Promise.race([
     p.catch(e => ({
-      ok: false, cf: false, hops: 0, cleared: false, clicks: 0, done: false,
+      ok: false, cf: false, hops: 0, cleared: false, clicks: 0,
+      paid: false, done: false,
       note: String((e && e.message) || e).split('\n')[0].slice(0, 120), ms: 0, dbg: null,
     })),
     guard,
   ]).finally(() => { if (t) clearTimeout(t); });
 }
 
-/* ---------------- worker ---------------- */
 async function worker(state, stats, links) {
   while (!state.stop) {
     if (Date.now() >= DEADLINE) { state.stop = true; break; }
@@ -210,19 +223,24 @@ async function worker(state, stats, links) {
     const res = await raceAttempt(attemptVisit(proxy, link, { log: console.log }), VISIT_BUDGET + 15000);
 
     const t = new Date().toISOString().slice(11, 19);
-    console.log(`${IND}[try] ${proxy} ok=${res.ok} cf=${res.cf} hops=${res.hops} cleared=${res.cleared} clicks=${res.clicks} done=${res.done} ${res.ms}ms${res.note ? ' | ' + res.note : ''}`);
-    if (res.dbg) console.log(`${IND}dbg=${JSON.stringify(res.dbg).slice(0, 320)}`);
+    console.log(`${IND}[try] ${proxy} ok=${res.ok} cf=${res.cf} hops=${res.hops} clicks=${res.clicks} paid=${res.paid ? 1 : 0} done=${res.done} ${res.ms}ms${res.note ? ' | ' + res.note : ''}`);
+    if (res.dbg) console.log(`${IND}dbg=${JSON.stringify(res.dbg).slice(0, 300)}`);
 
     if (!stats.links[tag] || typeof stats.links[tag] !== 'object') stats.links[tag] = { views: 0, attempts: 0 };
     stats.links[tag].attempts++;
 
-    const good = res.ok && res.cleared;
-    if (good) {
+    /* good proxy -> put it at the FRONT so its warm CF context gets reused */
+    if (res.ok && res.cleared) {
       state.bad.delete(proxy);
-      state.pool.push(proxy);                 // proven proxy -> requeue (warm context)
+      if (Math.random() < 0.75) state.pool.unshift(proxy); else state.pool.push(proxy);
     } else {
       const f = (state.bad.get(proxy) || 0) + 1;
-      if (f >= 2) state.bad.delete(proxy); else state.bad.set(proxy, f);
+      if (f >= 2) {
+        state.bad.delete(proxy);
+        if (state.dropped.length < 250) state.dropped.push(proxy);
+      } else {
+        state.bad.set(proxy, f);
+      }
     }
 
     if (res.done) {
@@ -230,7 +248,7 @@ async function worker(state, stats, links) {
       stats.views++;
       stats.links[tag].views++;
       stats.lifetimeViews++;
-      console.log(`[${t}] VIEW link=${tag} cf=${res.cf} hops=${res.hops} clicks=${res.clicks} run=${state.views}/${state.attempts} life=${stats.lifetimeViews} ${res.ms}ms`);
+      console.log(`[${t}] VIEW link=${tag} cf=${res.cf} hops=${res.hops} clicks=${res.clicks} paid=${res.paid ? 1 : 0} run=${state.views}/${state.attempts} life=${stats.lifetimeViews} ${res.ms}ms`);
     } else {
       console.log(`[${t}] MISS link=${tag} cf=${res.cf} hops=${res.hops} clicks=${res.clicks} run=${state.views}/${state.attempts} life=${stats.lifetimeViews} ${res.ms}ms`);
     }
@@ -248,7 +266,6 @@ async function worker(state, stats, links) {
   }
 }
 
-/* ---------------- main ---------------- */
 async function main() {
   const links = loadLinks();
   if (!links.length) { console.log('[run] no links in links.json'); return; }
@@ -257,8 +274,8 @@ async function main() {
 
   const stats = loadStats();
   const state = {
-    pool: [], refilling: false, stop: false, views: 0, attempts: 0, li: 0,
-    sinceBreak: 0, bad: new Map(),
+    pool: [], dropped: [], refilling: false, stop: false,
+    views: 0, attempts: 0, li: 0, sinceBreak: 0, bad: new Map(),
   };
 
   await buildPool(state);
