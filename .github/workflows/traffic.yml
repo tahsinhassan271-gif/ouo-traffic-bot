@@ -1,36 +1,68 @@
-name: traffic-bot
+name: ouo traffic bot
 
 on:
-  schedule:
-    - cron: '0 */6 * * *'
   workflow_dispatch:
     inputs:
-      minutes:
-        description: 'Run duration (minutes)'
-        default: '180'
-      target_views:
-        description: 'Stop after N views (0 = duration only)'
-        default: '0'
+      duration_minutes:
+        description: 'Run duration in minutes'
+        required: false
+        default: '20'
+      workers:
+        description: 'Concurrent workers'
+        required: false
+        default: '4'
+  schedule:
+    - cron: '0 */6 * * *'
 
 concurrency:
-  group: traffic-bot
+  group: ouo-bot
   cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  bot:
+  run:
     runs-on: ubuntu-latest
-    timeout-minutes: 340
+    timeout-minutes: 350
+
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-    steps:
-      - uses: actions/checkout@v4
+      USE_LOCAL_CHROMIUM: '1'
+      DURATION_MINUTES: ${{ github.event.inputs.duration_minutes || '20' }}
+      TARGET_VIEWS: '0'
+      WORKERS: ${{ github.event.inputs.workers || '4' }}
+      MIN_GAP_SECONDS: '3'
+      MAX_GAP_SECONDS: '12'
+      BREAK_EVERY: '20'
+      BREAK_SECONDS: '90'
+      MAX_LATENCY_MS: '4000'
+      POOL_MIN: '12'
 
-      - uses: actions/setup-node@v4
+      # ==== YOUR PROXIES (used first, before any free source) ====
+      # Format: http://USER:PASS@HOST:PORT  -- one per line
+      # Webshare free tier gives you 10 -- paste all of them here.
+      EXTRA_PROXIES: |
+        http://Tahsin280:Test12345@45.38.107.97:6014
+        # http://Tahsin280:Test12345@HOST2:PORT
+        # http://Tahsin280:Test12345@HOST3:PORT
+        # http://Tahsin280:Test12345@HOST4:PORT
+        # http://Tahsin280:Test12345@HOST5:PORT
+        # http://Tahsin280:Test12345@HOST6:PORT
+        # http://Tahsin280:Test12345@HOST7:PORT
+        # http://Tahsin280:Test12345@HOST8:PORT
+        # http://Tahsin280:Test12345@HOST9:PORT
+        # http://Tahsin280:Test12345@HOST10:PORT
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -38,22 +70,19 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run traffic bot
-        env:
-          USE_LOCAL_CHROMIUM: '1'
-          DURATION_MINUTES: ${{ github.event.inputs.minutes || '180' }}
-          TARGET_VIEWS: ${{ github.event.inputs.target_views || '0' }}
-          MIN_GAP_SECONDS: '3'
-          MAX_GAP_SECONDS: '12'
-          BREAK_EVERY: '20'
-          BREAK_SECONDS: '90'
+      - name: Sanity check config
+        run: |
+          node -e "const l=require('./links.json');console.log('links:',l.length)"
+          node -e "console.log('extra proxies:', (process.env.EXTRA_PROXIES||'').split('\n').filter(x=>x.trim()&&!x.trim().startsWith('#')).length)"
+
+      - name: Run bot
         run: node bot/run.js
 
-      - name: Commit results
+      - name: Commit state + logs
         if: always()
         run: |
-          git config user.name "traffic-bot"
+          git config user.name "ouo-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add -f data/
-          git diff --staged --quiet || git commit -m "traffic run $(date -u +%Y-%m-%dT%H:%MZ)"
-          git push || true
+          git add -A || true
+          git commit -m "bot state $(date -u +%FT%TZ)" || echo "nothing to commit"
+          git push || echo "push skipped"
